@@ -107,6 +107,12 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
       } case "getContactsForPhone": {
         this.getContactsForPhone(call.method, (String)call.argument("phone"), (boolean)call.argument("withThumbnails"), (boolean)call.argument("photoHighResolution"), (boolean)call.argument("orderByGivenName"), (boolean)call.argument("androidLocalizedLabels"), result);
         break;
+      } case "getContactsForEmail": {
+        this.getContactsForEmail(call.method, (String)call.argument("email"), (boolean)call.argument("withThumbnails"), (boolean)call.argument("photoHighResolution"), (boolean)call.argument("orderByGivenName"), (boolean)call.argument("androidLocalizedLabels"), result);
+        break;
+      } case "getContactsByEmailOrName": {
+        this.getContactsByEmailOrName(call.method, (String)call.argument("query"), (boolean)call.argument("withThumbnails"), (boolean)call.argument("photoHighResolution"), (boolean)call.argument("orderByGivenName"), (boolean)call.argument("androidLocalizedLabels"), result);
+        break;
       } case "getAvatar": {
         final Contact contact = Contact.fromMap((HashMap)call.argument("contact"));
         this.getAvatar(contact, (boolean)call.argument("photoHighResolution"), result);
@@ -210,6 +216,14 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
 
   private void getContactsForPhone(String callMethod, String phone, boolean withThumbnails, boolean photoHighResolution, boolean orderByGivenName, boolean localizedLabels, Result result) {
     new GetContactsTask(callMethod, result, withThumbnails, photoHighResolution, orderByGivenName, localizedLabels).executeOnExecutor(executor, phone, true);
+  }
+
+  private void getContactsForEmail(String callMethod, String email, boolean withThumbnails, boolean photoHighResolution, boolean orderByGivenName, boolean localizedLabels, Result result) {
+    new GetContactsTask(callMethod, result, withThumbnails, photoHighResolution, orderByGivenName, localizedLabels).executeOnExecutor(executor, email, true);
+  }
+
+  private void getContactsByEmailOrName(String callMethod, String query, boolean withThumbnails, boolean photoHighResolution, boolean orderByGivenName, boolean localizedLabels, Result result) {
+    new GetContactsTask(callMethod, result, withThumbnails, photoHighResolution, orderByGivenName, localizedLabels).executeOnExecutor(executor, query, true);
   }
 
   @Override
@@ -443,6 +457,8 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
         case "openDeviceContactPicker": contacts = getContactsFrom(getCursor(null, (String) params[0]), localizedLabels); break;
         case "getContacts": contacts = getContactsFrom(getCursor((String) params[0], null), localizedLabels); break;
         case "getContactsForPhone": contacts = getContactsFrom(getCursorForPhone(((String) params[0])), localizedLabels); break;
+        case "getContactsForEmail": contacts = getContactsFrom(getCursorForEmailOrName(((String) params[0]), true), localizedLabels); break;
+        case "getContactsByEmailOrName": contacts = getContactsFrom(getCursorForEmailOrName(((String) params[0]), false), localizedLabels); break;
         default: return null;
       }
 
@@ -527,6 +543,37 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
     }
     if (phoneCursor!= null)
       phoneCursor.close();
+
+    if (!contactIds.isEmpty()) {
+      String contactIdsListString = contactIds.toString().replace("[", "(").replace("]", ")");
+      String contactSelection = ContactsContract.Data.CONTACT_ID + " IN " + contactIdsListString;
+      return contentResolver.query(ContactsContract.Data.CONTENT_URI, PROJECTION, contactSelection, null, null);
+    }
+
+    return null;
+  }
+
+  private Cursor getCursorForEmailOrName(String query, boolean queryEmail) {
+    if (query.isEmpty())
+      return null;
+    Uri uri = Uri.withAppendedPath(Email.CONTENT_FILTER_URI, Uri.encode(query));
+    String[] projection = new String[]{ContactsContract.Data.CONTACT_ID, ContactsContract.Data.DISPLAY_NAME_PRIMARY, Email.ADDRESS};
+    String displayNameOrder = "lower(" + ContactsContract.Data.DISPLAY_NAME_PRIMARY + ") ASC";
+
+    ArrayList<String> contactIds = new ArrayList<>();
+    Cursor cursor = contentResolver.query(uri, projection, null, null, displayNameOrder);
+    while (cursor != null && cursor.moveToNext()) {
+      if (queryEmail) {
+        String email = cursor.getString(cursor.getColumnIndex(Email.ADDRESS));
+        if (!TextUtils.isEmpty(email) && email.toLowerCase().contains(query.toLowerCase())) {
+          contactIds.add(cursor.getString(cursor.getColumnIndex(ContactsContract.Data.CONTACT_ID)));
+        }
+      } else {
+        contactIds.add(cursor.getString(cursor.getColumnIndex(ContactsContract.Data.CONTACT_ID)));
+      }
+    }
+    if (cursor!= null)
+      cursor.close();
 
     if (!contactIds.isEmpty()) {
       String contactIdsListString = contactIds.toString().replace("[", "(").replace("]", ")");
