@@ -196,6 +196,13 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
                   StructuredPostal.COUNTRY,
           };
 
+  private static final String[] PROJECTION_EMAIL_NAME = {
+      ContactsContract.Data.CONTACT_ID,
+      ContactsContract.Data.MIMETYPE,
+      ContactsContract.Contacts.DISPLAY_NAME,
+      Email.ADDRESS,
+      Email.TYPE
+  };
 
   @TargetApi(Build.VERSION_CODES.ECLAIR)
   private void getContacts(String callMethod, String query, boolean withThumbnails, boolean photoHighResolution, boolean orderByGivenName, Result result) {
@@ -532,8 +539,48 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
     if (query.isEmpty())
       return null;
     Uri uri = Uri.withAppendedPath(Email.CONTENT_FILTER_URI, Uri.encode(query));
-    Cursor cursor = contentResolver.query(uri, PROJECTION, null, null, null);
-    return getContactsFrom(cursor);
+    Cursor cursor = contentResolver.query(uri, PROJECTION_EMAIL_NAME, null, null, null);
+    return getContactsForEmailOrNameFrom(cursor);
+  }
+
+  /**
+   * Builds the list of contacts from the cursor for email or name only
+   * @param cursor email cursor filtered
+   * @return the list of contacts
+   */
+  private ArrayList<Contact> getContactsForEmailOrNameFrom(Cursor cursor) {
+    HashMap<String, Contact> map = new LinkedHashMap<>();
+
+    while (cursor != null && cursor.moveToNext()) {
+      try {
+        String contactId = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Data.CONTACT_ID));
+        if (!map.containsKey(contactId)) {
+          map.put(contactId, new Contact(contactId));
+        }
+        Contact contact = map.get(contactId);
+
+        String mimeType = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Data.MIMETYPE));
+
+        // NAME
+        contact.displayName = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME));
+
+        //MAILS
+        if (mimeType.equals(CommonDataKinds.Email.CONTENT_ITEM_TYPE)) {
+          String email = cursor.getString(cursor.getColumnIndexOrThrow(Email.ADDRESS));
+          int type = cursor.getInt(cursor.getColumnIndexOrThrow(Email.TYPE));
+          if (!TextUtils.isEmpty(email)) {
+            contact.emails.add(new Item(Item.getEmailLabel(type, cursor),email));
+          }
+        }
+      } catch (java.lang.Exception e) {
+        e.printStackTrace();
+      }
+    }
+
+    if(cursor != null)
+      cursor.close();
+
+    return new ArrayList<>(map.values());
   }
 
   /**
