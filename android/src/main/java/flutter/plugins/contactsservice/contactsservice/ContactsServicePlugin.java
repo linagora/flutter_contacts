@@ -292,6 +292,9 @@ public class ContactsServicePlugin implements MethodCallHandler, FlutterPlugin, 
           finishWithResult(FORM_OPERATION_CANCELED);
           return true;
         }
+        if (intent == null) {
+          return true;
+        }
         Uri contactUri = intent.getData();
         Cursor cursor = contentResolver.query(contactUri, null, null, null, null);
         if (cursor.moveToFirst()) {
