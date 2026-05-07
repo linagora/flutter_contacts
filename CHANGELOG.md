@@ -1,3 +1,7 @@
+## [0.6.4] - May 7, 2026
+
+* iOS: support iOS 26
+
 ## [0.6.3] - September 21, 2021
 
 * Android: added method getContactsByEmail (@fjbatresv)
